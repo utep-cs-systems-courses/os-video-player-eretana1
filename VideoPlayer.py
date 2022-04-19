@@ -2,6 +2,9 @@
 
 import cv2
 import os
+import threading
+
+from TQueue import TQueue
 
 # globals
 outputDir    = 'frames'
@@ -9,7 +12,8 @@ clipFileName = 'clip.mp4'
 frameDelay   = 42       # the answer to everything
 
 
-def display_frames:
+# Consumer (Displays image )
+def display_frames(consumer_q):
     # initialize frame count
     count = 0
 
@@ -40,7 +44,7 @@ def display_frames:
     cv2.destroyAllWindows()
 
 
-def convert_to_grayscale():
+def convert_to_grayscale(producer_q, consumer_q):
     # initialize frame count
     count = 0
 
@@ -48,10 +52,11 @@ def convert_to_grayscale():
     inFileName = f'{outputDir}/frame_{count:04d}.bmp'
 
 
-    # load the next file
-    inputFrame = cv2.imread(inFileName, cv2.IMREAD_COLOR)
-
-    while inputFrame is not None and count < 72:
+    while inputFrame is not None:
+        # load the next file
+        inputFrame = cv2.imread(inFileName, cv2.IMREAD_COLOR)
+    
+    
         print(f'Converting frame {count}')
 
         # convert the image to grayscale
@@ -72,7 +77,10 @@ def convert_to_grayscale():
         inputFrame = cv2.imread(inFileName, cv2.IMREAD_COLOR)
 
 
-def extract_frames():
+# Producer thread (extracts frames and places them into queue)
+def extract_frames(producer_q):
+    global clipFileName
+    
     # initialize frame count
     count = 0
 
@@ -86,9 +94,10 @@ def extract_frames():
         
     # read one frame
     success,image = vidcap.read()
-        
+
+    
     print(f'Reading frame {count} {success}')
-    while success and count < 72:
+    while success:
         
         # write the current frame out as a jpeg image
         cv2.imwrite(f"{outputDir}/frame_{count:04d}.bmp", image)   
@@ -96,3 +105,18 @@ def extract_frames():
         success,image = vidcap.read()
         print(f'Reading frame {count}')
         count += 1
+
+
+producer_q = TQueue() # Producer sends to Queue, grayscale dequeues 
+consumer_q = TQueue() # grayscale sends to queue, consumer dequeues
+
+# Create threads that will extract frames, convert the frames, and display the frame
+producer_thread = threading.Thread(target=extract_frames, args=(producer_q,))
+grayscale_thread = threading.Thread(target=convert_to_grayscale, args=(producer_q, consumer_q))
+consumer_thread = threading.Thread(target=display_frames, args=(consumer_q,))
+
+# Start executing all threads
+producer_thread.start()
+grayscale_thread.start()
+consumer_thread.start()
+
